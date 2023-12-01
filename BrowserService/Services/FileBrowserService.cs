@@ -8,11 +8,11 @@ namespace BrowserService.Services
 {
     public class FileBrowserService : IFileBrowserService
     {
-        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly FileSystemDbContext _dbContext;
 
-        public FileBrowserService(IServiceScopeFactory scopeFactory)
+        public FileBrowserService(FileSystemDbContext dbContext)
         {
-            _scopeFactory = scopeFactory;
+            _dbContext = dbContext;
         }
 
         public async Task<string> SearchFileSystem(string? input)
@@ -35,13 +35,10 @@ namespace BrowserService.Services
                 //search file within folder
                 if (!string.IsNullOrEmpty(fileName) && !string.IsNullOrEmpty(folderPath))
                 {
-                    using var scope = _scopeFactory.CreateScope();
-                    var dbContext = scope.ServiceProvider.GetRequiredService<FileSystemDbContext>();
-
-                    var path = await dbContext.PathDb.FirstOrDefaultAsync(x => x.FolderPath == folderPath);
+                    var path = await _dbContext.PathDb.FirstOrDefaultAsync(x => x.FolderPath == folderPath);
                     if (path != null)
                     {
-                        var files = await dbContext.FileDb.Where(x => x.PathId == path.Id && x.FileName.StartsWith(fileName)).ToListAsync();
+                        var files = await _dbContext.FileDb.Where(x => x.PathId == path.Id && x.FileName.StartsWith(fileName)).ToListAsync();
                         if (files.Count > 0)
                         {
                             foreach (var file in files)
@@ -59,10 +56,7 @@ namespace BrowserService.Services
                 //search for any file
                 else if (!string.IsNullOrEmpty(fileName))
                 {
-                    using var scope = _scopeFactory.CreateScope();
-                    var dbContext = scope.ServiceProvider.GetRequiredService<FileSystemDbContext>();
-
-                    var files = await dbContext.FileDb.Where(x => x.FileName.StartsWith(fileName)).ToListAsync();
+                    var files = await _dbContext.FileDb.Where(x => x.FileName.StartsWith(fileName)).ToListAsync();
 
                     foreach (var file in files.Take(10))
                     {
@@ -78,7 +72,7 @@ namespace BrowserService.Services
                         }
                         else
                         {
-                            var path = dbContext.PathDb.First(x => x.Id == file.PathId);
+                            var path = _dbContext.PathDb.First(x => x.Id == file.PathId);
                             result += "/" + path.FolderPath + file.FileName + "\n";
                         }
                     }
@@ -104,16 +98,13 @@ namespace BrowserService.Services
                 fileName = cleanedInput.Substring(cleanedInput.LastIndexOf('/') + 1);
                 folderPath = cleanedInput.Substring(0, cleanedInput.LastIndexOf('/') + 1);
 
-                using var scope = _scopeFactory.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<FileSystemDbContext>();
-
-                var folderPathExists = await dbContext.PathDb.AnyAsync(x => x.FolderPath == folderPath);
+                var folderPathExists = await _dbContext.PathDb.AnyAsync(x => x.FolderPath == folderPath);
 
 
                 //create folder only
                 if (!folderPathExists && !string.IsNullOrEmpty(folderPath) && string.IsNullOrEmpty(fileName))
                 {
-                    await dbContext.PathDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.PathDb()
+                    await _dbContext.PathDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.PathDb()
                     {
                         FolderPath = folderPath
                     });
@@ -122,12 +113,12 @@ namespace BrowserService.Services
                 //create file and folder
                 else if (!folderPathExists && !string.IsNullOrEmpty(folderPath) && !string.IsNullOrEmpty(fileName))
                 {
-                    var newFolderPath = await dbContext.PathDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.PathDb()
+                    var newFolderPath = await _dbContext.PathDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.PathDb()
                     {
                         FolderPath = folderPath
                     });
 
-                    var file = await dbContext.FileDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.FileDb()
+                    var file = await _dbContext.FileDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.FileDb()
                     {
                         FileName = fileName,
                         PathId = newFolderPath.Entity.Id,
@@ -139,11 +130,11 @@ namespace BrowserService.Services
                 //create file in folder
                 else if (folderPathExists && !string.IsNullOrEmpty(folderPath) && !string.IsNullOrEmpty(fileName))
                 {
-                    var existingFolderPath = await dbContext.PathDb.FirstOrDefaultAsync(x => x.FolderPath == folderPath);
+                    var existingFolderPath = await _dbContext.PathDb.FirstOrDefaultAsync(x => x.FolderPath == folderPath);
 
                     if (existingFolderPath != null)
                     {
-                        await dbContext.FileDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.FileDb()
+                        await _dbContext.FileDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.FileDb()
                         {
                             FileName = fileName,
                             PathId = existingFolderPath.Id,
@@ -155,14 +146,14 @@ namespace BrowserService.Services
                 //create file only
                 else if (!folderPathExists && string.IsNullOrEmpty(folderPath) && !string.IsNullOrEmpty(fileName))
                 {
-                    await dbContext.FileDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.FileDb()
+                    await _dbContext.FileDb.AddAsync(new Infrastructure.Database.FileSystem.Entities.FileDb()
                     {
                         FileName = fileName
                     });
                     result += fileName;
                 }
 
-                await dbContext.SaveChangesAsync();
+                await _dbContext.SaveChangesAsync();
             }
             return result;
         }
@@ -184,31 +175,29 @@ namespace BrowserService.Services
                 fileName = cleanedInput.Substring(cleanedInput.LastIndexOf('/') + 1);
                 folderPath = cleanedInput.Substring(0, cleanedInput.LastIndexOf('/') + 1);
 
-                using var scope = _scopeFactory.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<FileSystemDbContext>();
 
-                var folderPathExists = await dbContext.PathDb.AnyAsync(x => x.FolderPath == folderPath);
+                var folderPathExists = await _dbContext.PathDb.AnyAsync(x => x.FolderPath == folderPath);
 
 
                 //remove folder only
                 if (folderPathExists && !string.IsNullOrEmpty(folderPath) && string.IsNullOrEmpty(fileName))
                 {
-                    var foldersForRemoval = await dbContext.PathDb.Where(x => x.FolderPath.StartsWith(folderPath)).ToListAsync();
+                    var foldersForRemoval = await _dbContext.PathDb.Where(x => x.FolderPath.StartsWith(folderPath)).ToListAsync();
 
                     if (foldersForRemoval.Count > 0)
                     {
                         foreach (var folderForRemoval in foldersForRemoval)
                         {
-                            var filesForRemoval = await dbContext.FileDb.Where(x => x.PathId == folderForRemoval.Id).ToListAsync();
+                            var filesForRemoval = await _dbContext.FileDb.Where(x => x.PathId == folderForRemoval.Id).ToListAsync();
                             foreach (var file in filesForRemoval)
                             {
                                 if (file != null)
                                 {
-                                    dbContext.FileDb.Remove(file);
+                                    _dbContext.FileDb.Remove(file);
                                 }
                             }
 
-                            dbContext.PathDb.Remove(folderForRemoval);
+                            _dbContext.PathDb.Remove(folderForRemoval);
                             result += folderPath;
                         }
                     }
@@ -216,15 +205,15 @@ namespace BrowserService.Services
                 //remove file in folder
                 else if (folderPathExists && !string.IsNullOrEmpty(folderPath) && !string.IsNullOrEmpty(fileName))
                 {
-                    var folderForRemoval = dbContext.PathDb.FirstOrDefault(x => x.FolderPath == folderPath);
+                    var folderForRemoval = _dbContext.PathDb.FirstOrDefault(x => x.FolderPath == folderPath);
 
                     if (folderForRemoval != null)
                     {
-                        var fileForRemoval = dbContext.FileDb.FirstOrDefault(x => x.FileName == fileName);
+                        var fileForRemoval = _dbContext.FileDb.FirstOrDefault(x => x.FileName == fileName);
 
                         if (fileForRemoval != null)
                         {
-                            dbContext.FileDb.Remove(fileForRemoval);
+                            _dbContext.FileDb.Remove(fileForRemoval);
                             result += folderPath + fileName;
                         }
                     }
@@ -232,16 +221,16 @@ namespace BrowserService.Services
                 //remove file only
                 else if (!folderPathExists && string.IsNullOrEmpty(folderPath) && !string.IsNullOrEmpty(fileName))
                 {
-                    var fileForRemoval = dbContext.FileDb.FirstOrDefault(x => x.FileName == fileName);
+                    var fileForRemoval = _dbContext.FileDb.FirstOrDefault(x => x.FileName == fileName);
 
                     if (fileForRemoval != null)
                     {
-                        dbContext.FileDb.Remove(fileForRemoval);
+                        _dbContext.FileDb.Remove(fileForRemoval);
                         result += fileName;
                     }
                 }
 
-                await dbContext.SaveChangesAsync();
+                await _dbContext.SaveChangesAsync();
             }
             return result;
         }

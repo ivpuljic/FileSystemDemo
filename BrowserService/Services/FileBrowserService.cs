@@ -9,12 +9,10 @@ namespace BrowserService.Services
     public class FileBrowserService : IFileBrowserService
     {
         private readonly IServiceScopeFactory _scopeFactory;
-        private readonly ILogger<FileBrowserService> _logger;
 
-        public FileBrowserService(IServiceScopeFactory scopeFactory, ILogger<FileBrowserService> logger)
+        public FileBrowserService(IServiceScopeFactory scopeFactory)
         {
             _scopeFactory = scopeFactory;
-            _logger = logger;
         }
 
         public async Task<string> SearchFileSystem(string? input)
@@ -58,22 +56,31 @@ namespace BrowserService.Services
                         }
                     }
                 }
-                //search for file within root
+                //search for any file
                 else if (!string.IsNullOrEmpty(fileName))
                 {
                     using var scope = _scopeFactory.CreateScope();
                     var dbContext = scope.ServiceProvider.GetRequiredService<FileSystemDbContext>();
 
-                    var files = await dbContext.FileDb.Where(x => x.FileName.StartsWith(fileName) && x.Path == null).ToListAsync();
+                    var files = await dbContext.FileDb.Where(x => x.FileName.StartsWith(fileName)).ToListAsync();
 
-                    foreach (var file in files)
+                    foreach (var file in files.Take(10))
                     {
                         if (result == "/")
                         {
                             result = "";
                         }
 
-                        result += "/" + file.FileName + "\n";
+
+                        if (file.PathId == null)
+                        {
+                            result += "/" + file.FileName + "\n";
+                        }
+                        else
+                        {
+                            var path = dbContext.PathDb.First(x => x.Id == file.PathId);
+                            result += "/" + path.FolderPath + file.FileName + "\n";
+                        }
                     }
                 }
             }
@@ -186,20 +193,24 @@ namespace BrowserService.Services
                 //remove folder only
                 if (folderPathExists && !string.IsNullOrEmpty(folderPath) && string.IsNullOrEmpty(fileName))
                 {
-                    var folderForRemoval = dbContext.PathDb.FirstOrDefault(x => x.FolderPath == folderPath);
+                    var foldersForRemoval = await dbContext.PathDb.Where(x => x.FolderPath.StartsWith(folderPath)).ToListAsync();
 
-                    if (folderForRemoval != null)
+                    if (foldersForRemoval.Count > 0)
                     {
-                        foreach (var file in folderForRemoval.Files)
+                        foreach (var folderForRemoval in foldersForRemoval)
                         {
-                            if (file != null)
+                            var filesForRemoval = await dbContext.FileDb.Where(x => x.PathId == folderForRemoval.Id).ToListAsync();
+                            foreach (var file in filesForRemoval)
                             {
-                                dbContext.FileDb.Remove(file);
+                                if (file != null)
+                                {
+                                    dbContext.FileDb.Remove(file);
+                                }
                             }
-                        }
 
-                        dbContext.PathDb.Remove(folderForRemoval);
-                        result += folderPath;
+                            dbContext.PathDb.Remove(folderForRemoval);
+                            result += folderPath;
+                        }
                     }
                 }
                 //remove file in folder

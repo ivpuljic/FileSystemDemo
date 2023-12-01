@@ -7,12 +7,10 @@ namespace FileSystemRestApi.Controllers
     [Route("file-system-browser")]
     public class FileSystemController : ControllerBase
     {
-        private readonly ILogger<FileSystemController> _logger;
         private readonly IFileBrowserService _fileBrowser;
 
-        public FileSystemController(ILogger<FileSystemController> logger, IFileBrowserService fileBrowser)
+        public FileSystemController(IFileBrowserService fileBrowser)
         {
-            _logger = logger;
             _fileBrowser = fileBrowser;
         }
 

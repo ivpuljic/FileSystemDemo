@@ -29,7 +29,7 @@ namespace FileSystemRestApi.Controllers
         }
 
         [HttpDelete]
-        [Route("deletef-file-or-folder")]
+        [Route("delete-file-or-folder")]
         public async Task<string> DeleteFileOrFolder([FromQuery] string input)
         {
             return await _fileBrowser.DeleteFileOrFolder(input);
